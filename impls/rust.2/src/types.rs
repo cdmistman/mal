@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use eyre::Result;
+
 #[derive(Clone)]
 pub enum MalType {
 	Bool(bool),
@@ -11,6 +13,8 @@ pub enum MalType {
 	String(String),
 	Symbol(String),
 	Vector(Vec<MalType>),
+
+	NativeFn(fn(&mut [MalType]) -> Result<MalType>),
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]

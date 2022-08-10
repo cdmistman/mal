@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ops::Neg;
 use std::str::FromStr;
 
 use eyre::Result;
@@ -162,15 +163,19 @@ impl<'source> Reader<'source> {
 				MalType::String(string)
 			},
 			number_or_symbol => {
-				if number_or_symbol
-					.chars()
-					.next()
-					.map(char::is_numeric) // if the first char is a digit, it's a number
-					.unwrap_or(false)
-				{
-					MalType::Number(f64::from_str(number_or_symbol)?)
-				} else {
-					MalType::Symbol(number_or_symbol.to_string())
+				let mut chars = number_or_symbol.chars();
+				match chars.next() {
+					Some(digit) if digit.is_numeric() => {
+						MalType::Number(f64::from_str(number_or_symbol)?)
+					},
+					Some('-')
+						if chars.next().map_or(false, char::is_numeric) =>
+					{
+						MalType::Number(
+							f64::from_str(&number_or_symbol[1..])?.neg(),
+						)
+					},
+					_ => MalType::Symbol(number_or_symbol.to_string()),
 				}
 			},
 		})
