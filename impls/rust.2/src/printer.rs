@@ -56,6 +56,8 @@ impl Display for MalType {
 			MalType::Vector(vals) => {
 				write!(f, "[{}]", list(vals))
 			},
+
+			MalType::NativeFn(_) => write!(f, "<native fn>"),
 		}
 	}
 }

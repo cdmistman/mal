@@ -53,4 +53,4 @@ macro_rules! tests {
 	};
 }
 
-tests![step0, step1];
+tests![step0, step1, step2];
