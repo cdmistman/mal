@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
+use debug_stub_derive::DebugStub;
 use eyre::Result;
 
-#[derive(Clone)]
+#[derive(Clone, DebugStub)]
 pub enum MalType {
 	Bool(bool),
 	HashMap(HashMap<MalHashKey, MalType>),
@@ -14,10 +15,12 @@ pub enum MalType {
 	Symbol(String),
 	Vector(Vec<MalType>),
 
-	NativeFn(fn(&mut [MalType]) -> Result<MalType>),
+	NativeFn(
+		#[debug_stub = "<native fn>"] fn(&mut [MalType]) -> Result<MalType>,
+	),
 }
 
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum MalHashKey {
 	String(String),
 	Keyword(String),
