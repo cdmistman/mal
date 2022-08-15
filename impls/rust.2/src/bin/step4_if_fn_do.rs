@@ -5,7 +5,6 @@ use std::io;
 use std::io::Write;
 use std::rc::Rc;
 
-use eyre::eyre;
 use eyre::Result;
 use rust2::env::Env;
 use rust2::reader;
@@ -16,7 +15,8 @@ fn main() -> Result<()> {
 	let mut stdin = io::stdin().lines();
 	let mut stdout = io::stdout();
 
-	let mut env = repl_env();
+	let mut env = rust2::core::ns();
+	rep("(def! not (fn* (a) (if a false true)))", &mut env)?;
 
 	loop {
 		print!("user> ");
@@ -51,7 +51,7 @@ fn read(input: &str) -> Result<MalType> {
 }
 
 fn is_special_atom(ast: &MalType) -> bool {
-	matches!(ast, MalType::Symbol(sym) if ["def!", "let*"].iter().any(|atom| sym == atom))
+	matches!(ast, MalType::Symbol(sym) if ["def!", "do", "fn*", "if", "let*"].iter().any(|atom| sym == atom))
 }
 
 fn eval(ast: MalType, env: &mut Env) -> Result<MalType> {
@@ -67,6 +67,94 @@ fn eval(ast: MalType, env: &mut Env) -> Result<MalType> {
 					let value = eval(list.remove(0), env)?;
 					env.set(key, value.clone());
 					Ok(value)
+				},
+				MalType::Symbol(sym) if sym == "do" => list
+					.into_iter()
+					.fold(Ok(MalType::Nil), |_, expr| eval(expr, env)),
+				MalType::Symbol(sym) if sym == "fn*" => {
+					let closed = env.clone();
+					let MalType::L(_, param_names) = list.remove(0) else {
+						return Err(eyre::eyre!("invalid `fn*` form: expected parameter list"));
+					};
+					let mut param_names = param_names.into_iter();
+					let body = list.remove(0);
+
+					let mut params = Vec::with_capacity(param_names.len());
+					let mut va_bind = None;
+					while let Some(name) = param_names.next() {
+						match name {
+							MalType::Symbol(var_arg) if var_arg == "&" => {
+								param_names
+									.next()
+									.map(|va| match va {
+										MalType::Symbol(sym) => {
+											Some(va_bind = Some(sym))
+										},
+										_ => None,
+									})
+									.flatten()
+									.ok_or_else(|| {
+										eyre::eyre!(
+											"invalid `fn*` form: no variable \
+											 binding for varargs"
+										)
+									})?
+							},
+							MalType::Symbol(name) => params.push(name),
+							_ => {
+								return Err(eyre::eyre!(
+									"invalid `fn*` form: parameters must be \
+									 symbols"
+								))
+							},
+						}
+					}
+					Ok(MalType::Function(Rc::new(move |args| {
+						let mut va_bind = va_bind.clone();
+
+						let closed_env = closed.clone();
+						let params = params.clone();
+						let va_start = va_bind
+							.as_ref()
+							.map(|_| params.len())
+							.unwrap_or_else(|| args.len());
+						let arg_binds =
+							args[..va_start].into_iter().map(|arg| arg.clone());
+
+						let mut app_env = Env::new_with_bindings(
+							Some(closed_env),
+							params.into_iter(),
+							arg_binds,
+						);
+
+						va_bind.take().map(|bind| {
+							app_env.set(
+								bind,
+								MalType::L(
+									ListKind::List,
+									args[va_start..]
+										.into_iter()
+										.map(|arg| arg.clone())
+										.collect(),
+								),
+							)
+						});
+
+						eval(body.clone(), &mut app_env)
+					})))
+				},
+				MalType::Symbol(sym) if sym == "if" => {
+					let cond = list.remove(0);
+					let then = list.remove(0);
+					let els = if list.is_empty() {
+						MalType::Nil
+					} else {
+						list.remove(0)
+					};
+					match eval(cond, env)? {
+						MalType::Bool(false) | MalType::Nil => eval(els, env),
+						_ => eval(then, env),
+					}
 				},
 				MalType::Symbol(sym) if sym == "let*" => {
 					let mut inner_env = Env::new(Some(env.clone()));
@@ -98,8 +186,8 @@ fn eval(ast: MalType, env: &mut Env) -> Result<MalType> {
 				unreachable!("expected `eval_ast` to return a list");
 			};
 			match list.remove(0) {
-				MalType::Function(fun) => fun(&mut list),
-				_ => Err(eyre::eyre!("expected a function")),
+				MalType::Function(closure) => closure(&mut list),
+				not => Err(eyre::eyre!("expected a function (got {not})")),
 			}
 		},
 		value => eval_ast(value, env),
@@ -128,65 +216,4 @@ fn eval_ast(ast: MalType, env: &mut Env) -> Result<MalType> {
 
 fn print(input: MalType) -> String {
 	format!("{input:#}")
-}
-
-fn repl_env() -> Env {
-	let mut env = Env::new(None);
-	[
-		(
-			"+".to_string(),
-			MalType::Function(Rc::new(|args| match args {
-				[MalType::Number(l), MalType::Number(r)] => {
-					Ok(MalType::Number(*l + *r))
-				},
-				[_, _] => Err(eyre!("`+` expects 2 numbers")),
-				args => Err(eyre!(
-					"`+` expects 2 args: {} were provided",
-					args.len()
-				)),
-			})),
-		),
-		(
-			"-".to_string(),
-			MalType::Function(Rc::new(|args| match args {
-				[MalType::Number(l), MalType::Number(r)] => {
-					Ok(MalType::Number(*l - *r))
-				},
-				[_, _] => Err(eyre!("`-` expects 2 numbers")),
-				args => Err(eyre!(
-					"`-` expects 2 args: {} were provided",
-					args.len()
-				)),
-			})),
-		),
-		(
-			"*".to_string(),
-			MalType::Function(Rc::new(|args| match args {
-				[MalType::Number(l), MalType::Number(r)] => {
-					Ok(MalType::Number(*l * *r))
-				},
-				[_, _] => Err(eyre!("`*` expects 2 numbers")),
-				args => Err(eyre!(
-					"`*` expects 2 args: {} were provided",
-					args.len()
-				)),
-			})),
-		),
-		(
-			"/".to_string(),
-			MalType::Function(Rc::new(|args| match args {
-				[MalType::Number(l), MalType::Number(r)] => {
-					Ok(MalType::Number(*l / *r))
-				},
-				[_, _] => Err(eyre!("`/` expects 2 numbers")),
-				args => Err(eyre!(
-					"`/` expects 2 args: {} were provided",
-					args.len()
-				)),
-			})),
-		),
-	]
-	.into_iter()
-	.for_each(|(key, value)| env.set(key, value));
-	env
 }

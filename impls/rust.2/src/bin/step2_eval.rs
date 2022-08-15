@@ -3,10 +3,12 @@
 use std::collections::HashMap;
 use std::io;
 use std::io::Write;
+use std::rc::Rc;
 
+use eyre::eyre;
 use eyre::Result;
-use rust2::builtin;
 use rust2::reader;
+use rust2::types::ListKind;
 use rust2::types::MalType;
 
 type Env = HashMap<String, MalType>;
@@ -51,17 +53,16 @@ fn read(input: &str) -> Result<MalType> {
 
 fn eval(ast: MalType, env: &mut Env) -> Result<MalType> {
 	match ast {
-		MalType::List(list) if !list.is_empty() => {
-			let MalType::List(mut list) = eval_ast(MalType::List(list), env)? else {
+		MalType::L(ListKind::List, list) if !list.is_empty() => {
+			let MalType::L(ListKind::List, mut list) = eval_ast(MalType::L(ListKind::List, list), env)? else {
 				return Err(eyre::eyre!("expected `eval_ast` to return a list (this should not happen)"));
 			};
 			let fun = list.remove(0);
 			match fun {
-				MalType::NativeFn(fun) => fun(&mut list),
+				MalType::Function(fun) => fun(&mut list),
 				_ => Err(eyre::eyre!("expected a function")),
 			}
 		},
-		list @ MalType::List(_) => Ok(list),
 		value => eval_ast(value, env),
 	}
 }
@@ -72,14 +73,9 @@ fn eval_ast(ast: MalType, env: &mut Env) -> Result<MalType> {
 			.get(&sym)
 			.cloned()
 			.ok_or_else(|| eyre::eyre!("Symbol not found: {sym}")),
-		MalType::List(list) => Ok(MalType::List(
+		MalType::L(kind, list) => Ok(MalType::L(
+			kind,
 			list.into_iter()
-				.map(|item| eval(item, env))
-				.collect::<Result<Vec<_>>>()?,
-		)),
-		MalType::Vector(vector) => Ok(MalType::Vector(
-			vector
-				.into_iter()
 				.map(|item| eval(item, env))
 				.collect::<Result<Vec<_>>>()?,
 		)),
@@ -98,9 +94,57 @@ fn print(input: MalType) -> String {
 
 fn std_env() -> Env {
 	Env::from([
-		("+".to_string(), MalType::NativeFn(builtin::add)),
-		("-".to_string(), MalType::NativeFn(builtin::sub)),
-		("*".to_string(), MalType::NativeFn(builtin::mul)),
-		("/".to_string(), MalType::NativeFn(builtin::div)),
+		(
+			"+".to_string(),
+			MalType::Function(Rc::new(|args| match args {
+				[MalType::Number(l), MalType::Number(r)] => {
+					Ok(MalType::Number(*l + *r))
+				},
+				[_, _] => Err(eyre!("`+` expects 2 numbers")),
+				args => Err(eyre!(
+					"`+` expects 2 args: {} were provided",
+					args.len()
+				)),
+			})),
+		),
+		(
+			"-".to_string(),
+			MalType::Function(Rc::new(|args| match args {
+				[MalType::Number(l), MalType::Number(r)] => {
+					Ok(MalType::Number(*l - *r))
+				},
+				[_, _] => Err(eyre!("`-` expects 2 numbers")),
+				args => Err(eyre!(
+					"`-` expects 2 args: {} were provided",
+					args.len()
+				)),
+			})),
+		),
+		(
+			"*".to_string(),
+			MalType::Function(Rc::new(|args| match args {
+				[MalType::Number(l), MalType::Number(r)] => {
+					Ok(MalType::Number(*l * *r))
+				},
+				[_, _] => Err(eyre!("`*` expects 2 numbers")),
+				args => Err(eyre!(
+					"`*` expects 2 args: {} were provided",
+					args.len()
+				)),
+			})),
+		),
+		(
+			"/".to_string(),
+			MalType::Function(Rc::new(|args| match args {
+				[MalType::Number(l), MalType::Number(r)] => {
+					Ok(MalType::Number(*l / *r))
+				},
+				[_, _] => Err(eyre!("`/` expects 2 numbers")),
+				args => Err(eyre!(
+					"`/` expects 2 args: {} were provided",
+					args.len()
+				)),
+			})),
+		),
 	])
 }

@@ -5,6 +5,7 @@ use std::str::FromStr;
 use eyre::Result;
 use regex::Regex;
 
+use crate::types::ListKind;
 use crate::types::MalHashKey;
 use crate::types::MalType;
 
@@ -60,7 +61,7 @@ impl<'source> Reader<'source> {
 			return Err(eyre!("invalid quote"));
 		};
 
-		Ok(MalType::List(vec![
+		Ok(MalType::L(ListKind::List, vec![
 			MalType::Symbol(kind.to_string()),
 			self.read_form()?,
 		]))
@@ -81,8 +82,8 @@ impl<'source> Reader<'source> {
 				end @ (")" | "]" | "}") if closes(start, end) => {
 					let _ = self.next(); // just guaranteed with peek
 					break Ok(match start {
-						"(" => MalType::List(list),
-						"[" => MalType::Vector(list),
+						"(" => MalType::L(ListKind::List, list),
+						"[" => MalType::L(ListKind::Vector, list),
 						"{" => MalType::HashMap({
 							let mut map =
 								HashMap::with_capacity(list.len() / 2);
@@ -94,7 +95,7 @@ impl<'source> Reader<'source> {
 										MalHashKey::Keyword(keyword)
 									},
 									MalType::String(string) => {
-										MalHashKey::String(string)
+										MalHashKey::String(string.into())
 									},
 									_ => {
 										return Err(eyre!(
@@ -160,7 +161,7 @@ impl<'source> Reader<'source> {
 				if !balanced {
 					return Err(eyre!("unbalanced"));
 				}
-				MalType::String(string)
+				MalType::String(string.into())
 			},
 			number_or_symbol => {
 				let mut chars = number_or_symbol.chars();

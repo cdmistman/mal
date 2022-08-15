@@ -1,17 +1,17 @@
 #![feature(let_else)]
 /// This test is literally just so I can run the MAL test suite within cargo.
 
-macro_rules! tests {
-	[$($name:ident),* $(,)?] => {
-		use eyre::ContextCompat;
+macro_rules! step {
+	($step:literal) => {
+		paste::paste! {
+			use eyre::ContextCompat;
 
-		use std::env;
-		use std::fs;
-		use std::process::Command;
+			use std::env;
+			use std::fs;
+			use std::process::Command;
 
-		$(
 			#[test]
-			fn $name() -> eyre::Result<()> {
+			fn [<step $step>]() -> eyre::Result<()> {
 				let pwd = env::current_dir()?;
 				for entry in fs::read_dir(&pwd)? {
 					let entry = entry?;
@@ -33,7 +33,7 @@ macro_rules! tests {
 					.context("no mal/ folder")?;
 
 				let output = Command::new("make")
-					.arg(concat!("test^rust.2^", stringify!($name)))
+					.arg(concat!("test^rust.2^step", stringify!($step)))
 					.current_dir(mal_dir)
 					.output()?;
 
@@ -49,8 +49,8 @@ macro_rules! tests {
 					Err(eyre::eyre!("test failed with exit code {status}"))
 				}
 			}
-		)*
+		}
 	};
 }
 
-tests![step0, step1, step2, step3];
+step!(4);

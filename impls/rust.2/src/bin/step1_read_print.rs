@@ -48,5 +48,5 @@ fn eval(input: MalType) -> MalType {
 }
 
 fn print(input: MalType) -> String {
-	format!("{input:#}")
+	format!("{:#}", dbg!(input))
 }
