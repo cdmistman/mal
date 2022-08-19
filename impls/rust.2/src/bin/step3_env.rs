@@ -131,7 +131,7 @@ fn print(input: MalType) -> String {
 }
 
 fn repl_env() -> Env {
-	let mut env = Env::new(None);
+	let env = Env::new(None);
 	[
 		(
 			"+".to_string(),

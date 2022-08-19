@@ -4,6 +4,10 @@ use std::rc::Rc;
 
 use eyre::Result;
 
+use crate::env::Env;
+
+type Function = Rc<dyn Fn(&mut [MalType]) -> Result<MalType>>;
+
 #[derive(Clone)]
 pub enum MalType {
 	Bool(bool),
@@ -14,7 +18,13 @@ pub enum MalType {
 	Number(f64),
 	String(String),
 	Symbol(String),
-	Function(Rc<dyn Fn(&mut [MalType]) -> Result<MalType>>),
+	Function(Function),
+	TCOFunction {
+		ast:      Box<MalType>,
+		params:   Vec<String>,
+		env:      Env,
+		function: Function,
+	},
 }
 
 #[derive(Clone)]
@@ -31,7 +41,7 @@ pub enum MalHashKey {
 
 impl Debug for MalType {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "{}", self.pr_str::<false>())
+		write!(f, "{}", self.pr_str::<true>())
 	}
 }
 
@@ -49,6 +59,10 @@ impl PartialEq for MalType {
 			(Self::Function(l), Self::Function(r)) => {
 				Rc::as_ptr(l) == Rc::as_ptr(r)
 			},
+			(
+				Self::TCOFunction { ast: l, .. },
+				Self::TCOFunction { ast: r, .. },
+			) => l == r,
 			_ => false,
 		}
 	}

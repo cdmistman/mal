@@ -1,12 +1,17 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::rc::Rc;
 
 use crate::types::MalType;
 
+/// Note: this type is a shared reference *with interior mutability only*.
+/// Mutability tracking only needs to occur internally, and instances can be
+/// shared with `.clone()` safely.
 #[derive(Clone)]
 pub struct Env(Rc<RefCell<EnvInner>>);
 
+#[derive(Debug)]
 pub struct EnvInner {
 	outer: Option<Env>,
 	data:  HashMap<String, MalType>,
@@ -36,7 +41,7 @@ impl Env {
 		Self::raw_new(outer, list.collect())
 	}
 
-	pub fn set(&mut self, key: String, value: MalType) {
+	pub fn set(&self, key: String, value: MalType) {
 		let mut inner = self.0.borrow_mut();
 		inner.data.insert(key, value);
 	}
@@ -59,3 +64,17 @@ impl Env {
 		}
 	}
 }
+
+impl Debug for Env {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		self.0.borrow().fmt(f)
+	}
+}
+
+impl PartialEq for Env {
+	fn eq(&self, other: &Self) -> bool {
+		self.0.borrow().data == other.0.borrow().data
+	}
+}
+
+impl Eq for Env {}

@@ -8,7 +8,9 @@ impl MalType {
 	pub fn pr_str<const PRINT_READABLY: bool>(&self) -> String {
 		match self {
 			MalType::Bool(b) => format!("{b}"),
-			MalType::Function(_) => "#<function>".to_string(),
+			MalType::Function(_) | MalType::TCOFunction { .. } => {
+				"#<function>".to_string()
+			},
 			MalType::Keyword(kw) => format!(":{kw}"),
 			MalType::Nil => "nil".to_string(),
 			MalType::Number(num) => format!("{num}"),
